@@ -4,11 +4,7 @@
 ## Author: Li Pidong
 ## Date: 2016-03-17
 
-library(ShortRead)
-library(Biostrings)
-library(dplyr)
-library(ggplot2)
-library(reshape2)
+
 # process data ------
 #' Processing of single fastq file
 #'
@@ -19,6 +15,11 @@ library(reshape2)
 #' bases : the matrix of bases
 #' nreads : the number of reads in this file
 proc_fastq <- function(fastq_file){
+  library(ShortRead)
+  library(Biostrings)
+  library(dplyr)
+  library(ggplot2)
+  library(reshape2)
   fq <- readFastq(fastq_file)
   nReads <- length(fq) # Total number of reads in fastq file
   ## If reads are not of constant width then inject them into a matrix pre-populated with
@@ -38,7 +39,7 @@ proc_fastq <- function(fastq_file){
       }
     }
   }
-  return(list(quality_score=q, bases=s, nreads=nReads))
+  return(list(quality_score=q, bases=s, nreads=nReads, seq_length=ncol(q)))
 }
 
 
@@ -46,11 +47,11 @@ proc_fastq <- function(fastq_file){
 
 #' point plot distribution of quality score
 #'
-#' @param quality_score the matrix of quality_score from the function of proc_fastq
+#' @param fastq_data  from the function of proc_fastq
 #'
 #' @return point plot
-point_plot <- function(quality_score){
-  qs <- quality_score
+point_plot <- function(fastq_data){
+  qs <- fastq_data$quality_score
   qs_reshape <- melt(qs)
   colnames(qs_reshape) <- c('reads', 'pos', 'quality_score')
   p <- ggplot(data=qs_reshape, aes(pos, quality_score) )
@@ -64,20 +65,31 @@ point_plot <- function(quality_score){
 
 }
 
-#'title per base percentage plot------
+#' Title calulate the base freqency
 #'
-#' @param bases the matrix of bases from the function of proc_fastq
+#' @param fastq_data from the function of proc_fastq
 #'
-#' @return ggplot
-base_percentage_plot <- function(bases){
+#' @return base frequency
+base_freq <- function(fastq_data){
+  bases <- fastq_data$bases
   bstats <- apply(bases, 2, function(x) table(factor(x, levels=c("A", "C", "G", "T","N"))))
   colnames(bstats) <- 1:length(bstats[1,])
-# the percentage of per base
+  # the percentage of per base
   bstats <- t(apply(bstats, 1, function(x) x/colSums(bstats)))
   bstats <- melt(bstats)
   colnames(bstats) <- c('base', 'pos', 'freq')
   bstats$pos <- factor(bstats$pos, levels=unique(bstats$pos), ordered=T)
+  bstats
+}
 
+#'Title per base frequency plot------
+#'
+#' @param fastq_data from the function of proc_fastq
+#'
+#' @return line plot
+base_freq_plot <- function(fastq_data){
+
+  bstats <- base_freq(fastq_data)
   out <- ggplot(bstats, aes(pos, freq, group=base, color=base)) +
     scale_x_discrete(breaks=c(1, seq(0, length(unique(bstats$pos)), by=10)[-1])) +
     geom_line(stat="identity") +
@@ -90,12 +102,13 @@ base_percentage_plot <- function(bases){
     theme(plot.title=element_text(vjust=1))
 }
 
-#' box_plot of the distribution of quality score
+#'Title box_plot of the distribution of quality score
 #'
-#' @param quality_score the matrix of quality_score from the function of proc_fastq
+#' @param fastq_data from the function of proc_fastq
 #'
 #' @return ggplot
-box_plot <- function(quality_score){
+qs_box_plot <- function(fastq_data){
+  quality_score <- fastq_data$quality_score
   row.names(quality_score) <- paste("s", 1:length(quality_score[,1]), sep="");
   colnames(quality_score) <- 1:length(quality_score[1,])
   bpl <- boxplot(quality_score, plot=FALSE)# 获取数值
@@ -108,7 +121,7 @@ box_plot <- function(quality_score){
                  color="#999999",
                  fill="#56B4E9",
                  varwidth = T) +
-    scale_x_discrete(breaks=c(1, seq(0, length(fq[['qs_box']][,1]), by=10)[-1])) +
+    scale_x_discrete(breaks=c(1, seq(0, length(astats[,1]), by=10)[-1])) +
     theme(legend.position = "none", plot.title = element_text(size = 12))+
     theme_bw()+
     xlab('Position along reads')+
@@ -117,15 +130,33 @@ box_plot <- function(quality_score){
     theme(plot.title=element_text(vjust=1))
 }
 
-#' Title the bar plot of  base percentage
+#' Title per position  base freqency bar plot
 #'
-#' @param quality_score the matrix of quality_score from the function of proc_fastq
-#' @param bases the matrix of bases from the function of proc_fastq
+#' @param fastq_data  from the function of proc_fastq
 #'
-#' @return ggplot
-base_percentage_bar_plot <- function(quality_score, bases){
-  q <- quality_score
-  s <- bases
+#' @return bar plot
+base_freq_bar_plot <- function(fastq_data){
+    bstats <- base_freq(fastq_data)
+    out <- ggplot(bstats, aes(pos, freq, fill=base), color="black") +
+    scale_x_discrete(breaks=c(1, seq(0, length(unique(bstats$pos)), by=10)[-1])) +
+    geom_bar(stat="identity") +
+    # scale_y_continuous(expand = c(0,0))+
+    ylab("Proportion")+
+    xlab('Position along reads')+
+    ggtitle('Base percentage composition along reads')+
+    theme_bw()+
+    theme(plot.title=element_text(vjust=1))
+}
+
+
+#' Title Per position average quality score of each base type
+#'
+#' @param fastq_data from the function of proc_fastq
+#'
+#' @return bar plot
+base_qs_per_pos_plot <- function(fastq_data){
+  q <- fastq_data$quality_score
+  s <- fastq_data$bases
   A <- q; A[s %in% c("T", "G", "C", "N")] <- NA; A <- colMeans(A, na.rm=TRUE)
   T <- q; T[s %in% c("A", "G", "C", "N")] <- NA; T <- colMeans(T, na.rm=TRUE)
   G <- q; G[s %in% c("T", "A", "C", "N")] <- NA; G <- colMeans(G, na.rm=TRUE)
@@ -142,15 +173,39 @@ base_percentage_bar_plot <- function(quality_score, bases){
     theme(plot.title=element_text(vjust=1))
 }
 
+#' Title average quality score per read
+#'
+#' @param fastq_data
+#'
+#' @return ggplot
+per_read_avg_qs_plot <- function(fastq_data){
+  # average quality score per read----
+  qs <- fastq_data$quality_score
+  qs_reshape <- melt(qs)
+  colnames(qs_reshape) <- c('reads', 'pos', 'quality_score')
+  qs_avg <- qs_reshape %>%
+    group_by(reads) %>%
+    summarise(avg_per_read = mean(quality_score))
+  out <- ggplot(qs_avg, aes(avg_per_read)) +
+    # geom_density(stat = 'bin', color='#DC0000')+
+    geom_histogram(aes(y=..density..), fill="#0072B2", stat="bin", color='white', binwidth=1.5)+
+    theme_bw()+
+    ylab("Density")+
+    xlab('The mean of  read quality')+
+    ggtitle('Quality score distribution over all reads')+
+    theme_bw()+
+    theme(plot.title=element_text(vjust=1))+
+    scale_x_continuous(expand = c(0,0))+
+    scale_y_continuous(expand = c(0,0), limits=c(0,0.16))
+}
+
 #' GC content distribution
 #'
-#' @param bases the matrix of bases from the function of proc_fastq
+#' @param fastq_data from the function of proc_fastq
 #'
-#' @return
-#' @export
-#'
-#' @examples
-gc_plot <- function(bases){
+#' @return ggplot
+gc_plot <- function(fastq_data){
+  bases <- fastq_data$bases
   nbase <- ncol(bases)
   dstats <- sapply(1:nrow(bases), function(ii){
     sum(bases[ii,] %in% c('C','G', 'c', 'g'))/nbase
@@ -169,11 +224,11 @@ gc_plot <- function(bases){
 
 #' point plot distribution of quality score
 #'
-#' @param quality_score the matrix of quality_score from the function of proc_fastq
+#' @param fastq_data
 #'
 #' @return point plot
-point_plot_1 <- function(quality_score){
-  qs <- quality_score
+point_plot_1 <- function(fastq_data){
+  qs <- fastq_data$quality_score
   qs_reshape <- melt(qs)
   colnames(qs_reshape) <- c('reads', 'pos', 'quality_score')
   plot(qs_reshape$pos, qs_reshape$quality_score)

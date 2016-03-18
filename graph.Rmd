@@ -1,0 +1,92 @@
+---
+title: "宏基因组下机数据质量控制"
+author: "Lipidong"
+date: "2016年3月17日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F,dev='CairoSVG' )
+```
+```{R}
+time_start <- Sys.time()
+source('./proc_fastq.R')
+fastq_file <- './raw_data/H4_S1_R1_001.fastq'
+# fastq_file <- '../quantibio/data/SRR038848.fastq'
+fastq_data <- proc_fastq(fastq_file)
+
+```
+### 基本信息
+
+序列长度: `r fastq_data$seq_length`
+
+读段数目: `r fastq_data$nreads`
+
+### 读段各位置碱基质量得分分布图
+
+```{r}
+time_a <- system.time({
+  plot_a <- point_plot(fastq_data)
+})
+# 
+plot_a
+```
+使用时间: `r time_a[3]` s
+
+### 读段各位置每个碱基所占百分比(折线图)
+
+```{r}
+time_b <- system.time({
+ plot_b <- base_freq_plot(fastq_data)
+})
+ plot_b
+```
+使用时间: `r time_b[3]`
+
+```{r}
+time_mid <- Sys.time()
+time_mid_spend <- time_mid - time_start
+```
+前两图花费时间: `r time_mid_spend`
+
+### 读段各位置碱基质量得分箱线图
+
+```{r}
+plot_c <- qs_box_plot(fastq_data)
+plot_c
+```
+
+
+### 读段各位置每个碱基所占百分比(条形图)
+
+```{r}
+plot_d <- base_freq_bar_plot(fastq_data)
+plot_d
+```
+
+### 每个读段平均质量得分分布图
+
+```{r}
+plot_e <- base_qs_per_pos_plot(fastq_data)
+plot_e
+```
+
+### 读段各位置每个碱基平均质量得分
+
+```{r}
+plot_f <- per_read_avg_qs_plot(fastq_data)
+plot_f
+```
+
+### 每个读段GC含量分布图(红色为正态分布)
+
+```{r}
+plot_e <- gc_plot(fastq_data)
+plot_e
+```
+
+```{r}
+time_end <- Sys.time()
+time_spend <- time_end - time_start
+```
+总计使用时间: `r time_spend` s
